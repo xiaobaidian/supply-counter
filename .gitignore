@@ -1,0 +1,21 @@
+*.iml
+.gradle/
+.idea/
+local.properties
+build/
+app/build/
+app/release/
+*.apk
+*.aab
+keystore/*
+!keystore/debug.p12
+*.keystore
+
+# 设计过程产物（生成图与水印清理中间件，不入库）
+design/icons/
+design/icons_clean/
+design/_watermark_check.png
+__pycache__/
+*.pyc
+push_commit.py
+_push_payload.json
