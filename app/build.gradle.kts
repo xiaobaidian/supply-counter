@@ -12,8 +12,8 @@ android {
         applicationId = "com.hospital.supply"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
     }
 
     // 固定签名密钥：保证每次 CI 构建同一密钥，可覆盖安装

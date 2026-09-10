@@ -5,7 +5,7 @@ import org.json.JSONObject
 
 /** 五种不计费小件 */
 object Items {
-    val ALL = listOf("压力表", "三环", "三通", "Y阀", "压力延长管")
+    val ALL = listOf("压力泵", "三环", "三通", "Y阀", "压力延长管")
 }
 
 /** 一个计数按钮 */
@@ -31,28 +31,35 @@ object Catalog {
     val DEPTS = listOf(
         Dept(
             "cardio", "心内科", 0xFFFFF0EC, 0xFFE8573F, 0xFFB23A25, listOf(
+                // 造影：三环 1、三通 1
                 Btn("c_angio", "造影", "ANGIO", 0xFFFF5A47, mapOf(
-                    "压力表" to 1, "三环" to 1, "三通" to 1, "Y阀" to 1, "压力延长管" to 1)),
+                    "压力泵" to 0, "三环" to 1, "三通" to 1, "Y阀" to 0, "压力延长管" to 0)),
+                // 治疗：五种小件各 1
                 Btn("c_tx", "治疗", "THERAPY", 0xFFF0932B, mapOf(
-                    "压力表" to 1, "三环" to 1, "三通" to 2, "Y阀" to 0, "压力延长管" to 1))
+                    "压力泵" to 1, "三环" to 1, "三通" to 1, "Y阀" to 1, "压力延长管" to 1))
             )
         ),
         Dept(
             "neuro", "神经科", 0xFFEAF3FC, 0xFF2E86C8, 0xFF1B5E8F, listOf(
+                // 造影：Y阀 1
                 Btn("n_angio", "造影", "ANGIO", 0xFF2FA3E0, mapOf(
-                    "压力表" to 1, "三环" to 1, "三通" to 1, "Y阀" to 1, "压力延长管" to 1)),
+                    "压力泵" to 0, "三环" to 0, "三通" to 0, "Y阀" to 1, "压力延长管" to 0)),
+                // 治疗：压力泵 1、Y阀 3
                 Btn("n_tx", "治疗", "THERAPY", 0xFF22B07D, mapOf(
-                    "压力表" to 1, "三环" to 1, "三通" to 2, "Y阀" to 0, "压力延长管" to 1))
+                    "压力泵" to 1, "三环" to 0, "三通" to 0, "Y阀" to 3, "压力延长管" to 0))
             )
         ),
         Dept(
             "vasc", "介入血管外科", 0xFFF0EBFC, 0xFF6C5CE7, 0xFF4B3FAD, listOf(
+                // 球囊治疗：压力泵 1、Y阀 1
                 Btn("v_balloon", "球囊治疗", "BALLOON", 0xFF6C5CE7, mapOf(
-                    "压力表" to 1, "三环" to 1, "三通" to 1, "Y阀" to 1, "压力延长管" to 2)),
+                    "压力泵" to 1, "三环" to 0, "三通" to 0, "Y阀" to 1, "压力延长管" to 0)),
+                // 栓塞治疗：Y阀 1
                 Btn("v_embol", "栓塞治疗", "EMBOLIC", 0xFFE0409E, mapOf(
-                    "压力表" to 1, "三环" to 1, "三通" to 2, "Y阀" to 0, "压力延长管" to 1)),
+                    "压力泵" to 0, "三环" to 0, "三通" to 0, "Y阀" to 1, "压力延长管" to 0)),
+                // 其他治疗：Y阀 1
                 Btn("v_other", "其他治疗", "OTHER", 0xFF0FA3A3, mapOf(
-                    "压力表" to 0, "三环" to 0, "三通" to 1, "Y阀" to 0, "压力延长管" to 1))
+                    "压力泵" to 0, "三环" to 0, "三通" to 0, "Y阀" to 1, "压力延长管" to 0))
             )
         )
     )
@@ -119,14 +126,17 @@ class Store(context: Context) {
                 counts.keys.forEach { k -> if (o.has(k)) counts[k] = o.optInt(k, 0).coerceAtLeast(0) }
             }
         }
-        sp.getString(KEY_CONFIG, null)?.let { raw ->
-            runCatching {
-                val o = JSONObject(raw)
-                config.keys.forEach { bid ->
-                    if (o.has(bid)) {
-                        val bo = o.getJSONObject(bid)
-                        config[bid]?.keys?.forEach { item ->
-                            if (bo.has(item)) config[bid]!![item] = bo.optInt(item, 0).coerceIn(0, 9)
+        // 配置结构变更（如小件改名）时，旧存档直接让位给新默认值；计数仍然保留
+        if (sp.getInt(KEY_CFG_VER, 0) == CFG_VERSION) {
+            sp.getString(KEY_CONFIG, null)?.let { raw ->
+                runCatching {
+                    val o = JSONObject(raw)
+                    config.keys.forEach { bid ->
+                        if (o.has(bid)) {
+                            val bo = o.getJSONObject(bid)
+                            config[bid]?.keys?.forEach { item ->
+                                if (bo.has(item)) config[bid]!![item] = bo.optInt(item, 0).coerceIn(0, 9)
+                            }
                         }
                     }
                 }
@@ -147,11 +157,15 @@ class Store(context: Context) {
         sp.edit()
             .putString(KEY_COUNTS, co.toString())
             .putString(KEY_CONFIG, go.toString())
+            .putInt(KEY_CFG_VER, CFG_VERSION)
             .apply()
     }
 
     private companion object {
         const val KEY_COUNTS = "counts"
         const val KEY_CONFIG = "config"
+        const val KEY_CFG_VER = "cfg_ver"
+        /** 小件清单或默认用量结构变更时 +1：旧存档配置自动重置为默认值 */
+        const val CFG_VERSION = 2
     }
 }
