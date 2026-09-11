@@ -82,32 +82,37 @@ object Screenshot {
     @Suppress("DEPRECATION")
     private fun save(ctx: Context, bmp: Bitmap, name: String): Uri? {
         return try {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val v = ContentValues().apply {
-                put(MediaStore.Images.Media.DISPLAY_NAME, name)
-                put(MediaStore.Images.Media.MIME_TYPE, "image/png")
-                put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/$ALBUM")
-                put(MediaStore.Images.Media.IS_PENDING, 1)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val v = ContentValues().apply {
+                    put(MediaStore.Images.Media.DISPLAY_NAME, name)
+                    put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+                    put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/$ALBUM")
+                    put(MediaStore.Images.Media.IS_PENDING, 1)
+                }
+                val uri = ctx.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, v)
+                    ?: return null
+                ctx.contentResolver.openOutputStream(uri).use { out ->
+                    if (out == null) return null
+                    bmp.compress(Bitmap.CompressFormat.PNG, 100, out)
+                }
+                val done = ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) }
+                ctx.contentResolver.update(uri, done, null, null)
+                uri
+            } else {
+                @Suppress("DEPRECATION")
+                val dir = File(
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
+                    ALBUM
+                )
+                if (!dir.exists() && !dir.mkdirs()) return null
+                val f = File(dir, name)
+                FileOutputStream(f).use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                MediaStore.Images.Media.insertImage(ctx.contentResolver, f.absolutePath, name, null)
+                Uri.fromFile(f)
             }
-            val uri = ctx.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, v)
-                ?: return null
-            ctx.contentResolver.openOutputStream(uri).use { out ->
-                if (out == null) return null
-                bmp.compress(Bitmap.CompressFormat.PNG, 100, out)
-            }
-            val done = ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) }
-            ctx.contentResolver.update(uri, done, null, null)
-            uri
-        } else {
-            val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), ALBUM)
-            if (!dir.exists() && !dir.mkdirs()) return null
-            val f = File(dir, name)
-            FileOutputStream(f).use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
-            MediaStore.Images.Media.insertImage(ctx.contentResolver, f.absolutePath, name, null)
-            Uri.fromFile(f)
+        } catch (t: Throwable) {
+            null
         }
-    } catch (t: Throwable) {
-        null
     }
 
     private fun fileName(): String {
