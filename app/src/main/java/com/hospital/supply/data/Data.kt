@@ -79,10 +79,11 @@ object Catalog {
     fun zeroCounts(): Map<String, Int> = ALL_BTNS.associate { (b, _) -> b.id to 0 }
 }
 
-/** 全部状态：每个按钮的台次 + 每个按钮的小件用量配置 */
+/** 全部状态：每个按钮的台次 + 每个按钮的小件用量配置 + 本台备注 */
 data class AppState(
     val counts: Map<String, Int>,
-    val config: Map<String, Map<String, Int>>
+    val config: Map<String, Map<String, Int>>,
+    val note: String = ""
 ) {
     /** 小件累计：Σ(按钮台次 × 该按钮配置用量) */
     fun totals(): Map<String, Int> {
@@ -110,6 +111,12 @@ data class AppState(
 
     fun clearedCounts() = copy(counts = Catalog.zeroCounts())
     fun defaultedConfig() = copy(config = Catalog.defaultConfig())
+    fun withNote(v: String) = copy(note = v.take(NOTE_MAX))
+
+    companion object {
+        /** 备注字数上限，防止无限输入导致存档膨胀 */
+        const val NOTE_MAX = 200
+    }
 }
 
 /** 本地存储：切页面、杀进程都不会丢，只有清空计数才会归零 */
@@ -142,7 +149,8 @@ class Store(context: Context) {
                 }
             }
         }
-        return AppState(counts, config)
+        val note = sp.getString(KEY_NOTE, "").orEmpty().take(AppState.NOTE_MAX)
+        return AppState(counts, config, note)
     }
 
     fun save(state: AppState) {
@@ -158,12 +166,14 @@ class Store(context: Context) {
             .putString(KEY_COUNTS, co.toString())
             .putString(KEY_CONFIG, go.toString())
             .putInt(KEY_CFG_VER, CFG_VERSION)
+            .putString(KEY_NOTE, state.note)
             .apply()
     }
 
     private companion object {
         const val KEY_COUNTS = "counts"
         const val KEY_CONFIG = "config"
+        const val KEY_NOTE = "note"
         const val KEY_CFG_VER = "cfg_ver"
         /** 小件清单或默认用量结构变更时 +1：旧存档配置自动重置为默认值 */
         const val CFG_VERSION = 2

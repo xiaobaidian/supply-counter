@@ -4,6 +4,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -24,6 +25,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -37,8 +40,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -307,10 +317,160 @@ fun StatCard(state: AppState, onClear: () -> Unit) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  备注卡片：大字号输入 + 右下角一键截图                                */
+/* ------------------------------------------------------------------ */
+@Composable
+fun NoteCard(
+    note: String,
+    onNoteChange: (String) -> Unit,
+    onShot: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(elevation = 14.dp, shape = RoundedCornerShape(24.dp))
+            .clip(RoundedCornerShape(24.dp))
+            .background(Palette.Card)
+            .padding(16.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "备注",
+                color = Palette.Ink,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.4.sp
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = "随计数一起自动保存",
+                color = Palette.Ink3,
+                fontSize = 10.5.sp,
+                fontWeight = FontWeight.Medium
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = "${note.length}/${AppState.NOTE_MAX}",
+                color = if (note.length >= AppState.NOTE_MAX) Palette.Danger else Palette.Ink3,
+                fontSize = 10.5.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+
+        Spacer(Modifier.height(11.dp))
+
+        OutlinedTextField(
+            value = note,
+            onValueChange = onNoteChange,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 100.dp),
+            textStyle = TextStyle(
+                fontSize = 20.sp,          // 大字号，一行约 15 字
+                fontWeight = FontWeight.SemiBold,
+                color = Palette.Ink,
+                lineHeight = 29.sp
+            ),
+            placeholder = {
+                Text(
+                    "记录本台特殊情况…",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Palette.Ink3
+                )
+            },
+            shape = RoundedCornerShape(15.dp),
+            minLines = 3,
+            maxLines = 5,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = Color(0x332E86C8),
+                unfocusedBorderColor = Color(0x1A12181F),
+                focusedContainerColor = Palette.FieldBg,
+                unfocusedContainerColor = Palette.FieldBg,
+                cursorColor = Color(0xFF2E86C8),
+                focusedTextColor = Palette.Ink,
+                unfocusedTextColor = Palette.Ink
+            )
+        )
+
+        Spacer(Modifier.height(12.dp))
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+            Text(
+                text = "截图会把当前页面存进相册",
+                color = Palette.Ink3,
+                fontSize = 10.5.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(bottom = 13.dp)
+            )
+            Spacer(Modifier.weight(1f))
+            ShotButton(onClick = onShot)
+        }
+    }
+}
+
+@Composable
+private fun ShotButton(onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(Palette.Ink)
+            .clickable { onClick() }
+            .padding(horizontal = 15.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Canvas(Modifier.size(19.dp)) {
+            val line = Stroke(
+                width = 2.1.dp.toPx(),
+                cap = StrokeCap.Round,
+                join = StrokeJoin.Round
+            )
+            val bodyTop = size.height * 0.28f
+            val bodyH = size.height * 0.60f
+            drawRoundRect(
+                color = Color.White,
+                topLeft = Offset(0f, bodyTop),
+                size = Size(size.width, bodyH),
+                cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx()),
+                style = line
+            )
+            // 顶部取景框凸起
+            drawRoundRect(
+                color = Color.White,
+                topLeft = Offset(size.width * 0.31f, size.height * 0.12f),
+                size = Size(size.width * 0.38f, size.height * 0.17f),
+                cornerRadius = CornerRadius(2.5.dp.toPx(), 2.5.dp.toPx()),
+                style = line
+            )
+            drawCircle(
+                color = Color.White,
+                radius = size.width * 0.17f,
+                center = Offset(size.width * 0.5f, bodyTop + bodyH * 0.5f),
+                style = line
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = "截图",
+            color = Color.White,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.6.sp
+        )
+    }
+}
+
+/* ------------------------------------------------------------------ */
 /*  主页                                                               */
 /* ------------------------------------------------------------------ */
 @Composable
-fun HomeScreen(state: AppState, onInc: (String) -> Unit, onDec: (String) -> Unit, onClear: () -> Unit) {
+fun HomeScreen(
+    state: AppState,
+    onInc: (String) -> Unit,
+    onDec: (String) -> Unit,
+    onClear: () -> Unit,
+    onNoteChange: (String) -> Unit,
+    onShot: () -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -323,6 +483,7 @@ fun HomeScreen(state: AppState, onInc: (String) -> Unit, onDec: (String) -> Unit
             DeptCard(state = state, dept = d, onInc = onInc, onDec = onDec)
         }
         StatCard(state = state, onClear = onClear)
+        NoteCard(note = state.note, onNoteChange = onNoteChange, onShot = onShot)
     }
 }
 

@@ -1,15 +1,16 @@
 package com.hospital.supply
 
+import android.Manifest
+import android.app.Activity
 import android.content.Context
-import android.os.Build
+import android.content.pm.PackageManager
 import android.os.Bundle
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -42,12 +43,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.core.content.ContextCompat
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
@@ -68,6 +71,8 @@ import com.hospital.supply.ui.HomeScreen
 import com.hospital.supply.ui.Palette
 import com.hospital.supply.ui.SettingsScreen
 import com.hospital.supply.ui.SupplyCounterTheme
+import com.hospital.supply.util.Feedback
+import com.hospital.supply.util.Screenshot
 import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
@@ -76,7 +81,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             SupplyCounterTheme {
-                Root()
+                Root(activity = this@MainActivity)
             }
         }
     }
@@ -96,27 +101,17 @@ private data class Ask(
 )
 
 @Composable
-fun Root() {
+fun Root(activity: Activity) {
     val context = LocalContext.current
     val store = remember { Store(context.applicationContext) }
+    val feedback = remember { Feedback(context.applicationContext) }
     var state by remember { mutableStateOf(store.load()) }
     var screen by remember { mutableStateOf<Screen>(Screen.Home) }
     var toast by remember { mutableStateOf<String?>(null) }
     var ask by remember { mutableStateOf<Ask?>(null) }
 
-    val vibrator = remember {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
-        } else {
-            @Suppress("DEPRECATION")
-            context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-        }
-    }
-
-    fun buzz() {
-        runCatching {
-            vibrator.vibrate(VibrationEffect.createOneShot(25, VibrationEffect.DEFAULT_AMPLITUDE))
-        }
+    DisposableEffect(Unit) {
+        onDispose { feedback.release() }
     }
 
     fun persist(next: AppState) {
@@ -126,23 +121,53 @@ fun Root() {
 
     fun inc(id: String) {
         persist(state.withCount(id, state.countOf(id) + 1))
+        feedback.plus()
     }
 
     fun dec(id: String) {
         val cur = state.countOf(id)
         if (cur <= 0) {
             toast = "已经是 0，无法再减少"
-            buzz()
+            feedback.blocked()
             return
         }
         persist(state.withCount(id, cur - 1))
         toast = "已减少 1 次：${Catalog.deptOf(id).name} · ${Catalog.btn(id).name} = ${cur - 1}"
-        buzz()
+        feedback.minus()
+    }
+
+    fun shot() {
+        Screenshot.capture(activity) { ok, detail ->
+            toast = detail
+            if (!ok) feedback.blocked()
+        }
+    }
+
+    val permLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) shot() else toast = "没有存储权限，无法保存截图"
+    }
+
+    fun requestShot() {
+        // Android 10 起走 MediaStore 免权限；8/9 需要先拿到写外存权限
+        val need = Screenshot.needsLegacyPermission && ContextCompat.checkSelfPermission(
+            context, Manifest.permission.WRITE_EXTERNAL_STORAGE
+        ) != PackageManager.PERMISSION_GRANTED
+        if (need) {
+            permLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        } else {
+            shot()
+        }
+    }
+
+    fun editNote(v: String) {
+        persist(state.withNote(v))
     }
 
     LaunchedEffect(toast) {
         if (toast != null) {
-            delay(1500)
+            delay(1800)
             toast = null
         }
     }
@@ -180,13 +205,16 @@ fun Root() {
                     onClear = {
                         ask = Ask(
                             title = "清空本台计数？",
-                            message = "7 个按钮的记录次数将全部归零，按钮配置会保留。此操作不可撤销，仅在你点此确认后执行。",
+                            message = "7 个按钮的记录次数将全部归零，按钮配置与备注会保留。此操作不可撤销，仅在你点此确认后执行。",
                             okText = "清空"
                         ) {
                             persist(state.clearedCounts())
                             toast = "已清空本台计数"
+                            feedback.tap()
                         }
-                    }
+                    },
+                    onNoteChange = { editNote(it) },
+                    onShot = { requestShot() }
                 )
 
                 is Screen.Settings -> SettingsScreen(
