@@ -48,6 +48,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -72,6 +74,7 @@ private fun Modifier.tnum() = this
 @Composable
 fun CountButton(
     btn: Btn,
+    displayName: String,
     count: Int,
     compact: Boolean,
     onInc: () -> Unit,
@@ -137,12 +140,13 @@ fun CountButton(
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                text = btn.name,
+                text = displayName,
                 color = Color.White,
                 fontSize = if (compact) 14.sp else 15.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 0.8.sp,
-                lineHeight = 18.sp
+                lineHeight = 18.sp,
+                maxLines = 2
             )
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
@@ -217,6 +221,7 @@ fun DeptCard(state: AppState, dept: com.hospital.supply.data.Dept, onInc: (Strin
             dept.buttons.forEach { b ->
                 CountButton(
                     btn = b,
+                    displayName = state.nameOf(b.id),
                     count = state.countOf(b.id),
                     compact = dept.buttons.size > 2,
                     onInc = { onInc(b.id) },
@@ -323,7 +328,8 @@ fun StatCard(state: AppState, onClear: () -> Unit) {
 fun NoteCard(
     note: String,
     onNoteChange: (String) -> Unit,
-    onShot: () -> Unit
+    onShot: () -> Unit,
+    onFootY: (Float) -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -345,13 +351,6 @@ fun NoteCard(
             Text(
                 text = "随计数一起自动保存",
                 color = Palette.Ink3,
-                fontSize = 10.5.sp,
-                fontWeight = FontWeight.Medium
-            )
-            Spacer(Modifier.weight(1f))
-            Text(
-                text = "${note.length}/${AppState.NOTE_MAX}",
-                color = if (note.length >= AppState.NOTE_MAX) Palette.Danger else Palette.Ink3,
                 fontSize = 10.5.sp,
                 fontWeight = FontWeight.Medium
             )
@@ -394,9 +393,15 @@ fun NoteCard(
         )
 
         Spacer(Modifier.height(12.dp))
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+        // 这一行（说明文字 + 截图按钮）不进截图，把它在窗口里的顶边报给上层
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .onGloballyPositioned { c -> onFootY(c.positionInWindow().y) },
+            verticalAlignment = Alignment.Bottom
+        ) {
             Text(
-                text = "截图会把当前页面存进相册",
+                text = "截图不会包含这一行",
                 color = Palette.Ink3,
                 fontSize = 10.5.sp,
                 fontWeight = FontWeight.Medium,
@@ -469,7 +474,8 @@ fun HomeScreen(
     onDec: (String) -> Unit,
     onClear: () -> Unit,
     onNoteChange: (String) -> Unit,
-    onShot: () -> Unit
+    onShot: () -> Unit,
+    onFootY: (Float) -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -483,7 +489,12 @@ fun HomeScreen(
             DeptCard(state = state, dept = d, onInc = onInc, onDec = onDec)
         }
         StatCard(state = state, onClear = onClear)
-        NoteCard(note = state.note, onNoteChange = onNoteChange, onShot = onShot)
+        NoteCard(
+            note = state.note,
+            onNoteChange = onNoteChange,
+            onShot = onShot,
+            onFootY = onFootY
+        )
     }
 }
 
@@ -554,7 +565,13 @@ fun SettingsScreen(state: AppState, onOpen: (String) -> Unit, onResetConfig: () 
                         )
                         Spacer(Modifier.width(11.dp))
                         Column(Modifier.weight(1f)) {
-                            Text(b.name, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, color = Palette.Ink)
+                            Text(
+                                text = state.nameOf(b.id),
+                                fontSize = 14.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Palette.Ink,
+                                maxLines = 1
+                            )
                             Spacer(Modifier.height(2.dp))
                             Text(shown, fontSize = 11.sp, color = Palette.Ink3)
                         }
@@ -602,13 +619,15 @@ fun SettingsScreen(state: AppState, onOpen: (String) -> Unit, onResetConfig: () 
 fun ConfigScreen(
     state: AppState,
     btnId: String,
-    onChange: (String, Int) -> Unit
+    onChange: (String, Int) -> Unit,
+    onNameChange: (String) -> Unit
 ) {
     val btn = Catalog.btn(btnId)
     val dept = Catalog.deptOf(btnId)
     val cfg = state.cfgOf(btnId)
     val count = state.countOf(btnId)
     val contribution = Items.ALL.sumOf { (cfg[it] ?: 0) * count }
+    val nameValue = state.names[btnId].orEmpty()
 
     Column(
         modifier = Modifier
@@ -625,12 +644,54 @@ fun ConfigScreen(
                     .background(Color(btn.color))
             )
             Spacer(Modifier.width(11.dp))
-            Column {
-                Text(btn.name, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Palette.Ink)
-                Spacer(Modifier.height(2.dp))
-                Text("${dept.name} · 当前已记录 $count 次", fontSize = 11.5.sp, color = Palette.Ink3)
-            }
+            Text(
+                text = "${dept.name} · 当前已记录 $count 次",
+                fontSize = 11.5.sp,
+                color = Palette.Ink3
+            )
         }
+        Spacer(Modifier.height(11.dp))
+
+        // 手术名称：改过就存自己的，清空自动回到内置名称
+        OutlinedTextField(
+            value = nameValue,
+            onValueChange = onNameChange,
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            textStyle = TextStyle(
+                fontSize = 19.sp,
+                fontWeight = FontWeight.Bold,
+                color = Palette.Ink
+            ),
+            label = {
+                Text("手术名称", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+            },
+            placeholder = {
+                Text(
+                    btn.name,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Palette.Ink3
+                )
+            },
+            shape = RoundedCornerShape(14.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = Color(0xFF2E86C8),
+                unfocusedBorderColor = Color(0x1A12181F),
+                focusedContainerColor = Palette.Card,
+                unfocusedContainerColor = Palette.Card,
+                cursorColor = Color(0xFF2E86C8),
+                focusedTextColor = Palette.Ink,
+                unfocusedTextColor = Palette.Ink
+            )
+        )
+        Text(
+            text = "留空则显示默认名称「${btn.name}」，最多 ${AppState.NAME_MAX} 个字",
+            fontSize = 10.5.sp,
+            color = Palette.Ink3,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(start = 4.dp, top = 5.dp)
+        )
         Spacer(Modifier.height(16.dp))
 
         Column(
@@ -694,8 +755,8 @@ fun ConfigScreen(
         ) {
             val parts = Items.ALL.filter { (cfg[it] ?: 0) > 0 }
             Text(
-                text = if (parts.isEmpty()) "做 1 次 ${btn.name} 消耗：（未配置小件）"
-                else "做 1 次 ${btn.name} 消耗：" + parts.joinToString("、") { "$it ×${cfg[it]}" },
+                text = if (parts.isEmpty()) "做 1 次 ${state.nameOf(btnId)} 消耗：（未配置小件）"
+                else "做 1 次 ${state.nameOf(btnId)} 消耗：" + parts.joinToString("、") { "$it ×${cfg[it]}" },
                 fontSize = 12.sp,
                 color = Palette.Ink2,
                 lineHeight = 19.sp

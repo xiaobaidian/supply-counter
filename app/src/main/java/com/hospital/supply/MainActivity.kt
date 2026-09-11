@@ -109,6 +109,8 @@ fun Root(activity: Activity) {
     var screen by remember { mutableStateOf<Screen>(Screen.Home) }
     var toast by remember { mutableStateOf<String?>(null) }
     var ask by remember { mutableStateOf<Ask?>(null) }
+    // 备注卡里「截图按钮那一行」的窗口 Y 坐标，截图时从这里截断，避免把按钮本身拍进去
+    var footY by remember { mutableStateOf<Float?>(null) }
 
     DisposableEffect(Unit) {
         onDispose { feedback.release() }
@@ -132,12 +134,12 @@ fun Root(activity: Activity) {
             return
         }
         persist(state.withCount(id, cur - 1))
-        toast = "已减少 1 次：${Catalog.deptOf(id).name} · ${Catalog.btn(id).name} = ${cur - 1}"
+        toast = "已减少 1 次：${Catalog.deptOf(id).name} · ${state.nameOf(id)} = ${cur - 1}"
         feedback.minus()
     }
 
     fun shot() {
-        Screenshot.capture(activity) { ok, detail ->
+        Screenshot.capture(activity, cutBottomY = footY) { ok, detail ->
             toast = detail
             if (!ok) feedback.blocked()
         }
@@ -184,7 +186,7 @@ fun Root(activity: Activity) {
                     is Screen.Settings -> "设置"
                     is Screen.Config -> {
                         val id = (screen as Screen.Config).btnId
-                        "${Catalog.deptOf(id).name} · ${Catalog.btn(id).name}"
+                        "${Catalog.deptOf(id).name} · ${state.nameOf(id)}"
                     }
                 },
                 subtitle = when (screen) {
@@ -214,7 +216,8 @@ fun Root(activity: Activity) {
                         }
                     },
                     onNoteChange = { editNote(it) },
-                    onShot = { requestShot() }
+                    onShot = { requestShot() },
+                    onFootY = { footY = it }
                 )
 
                 is Screen.Settings -> SettingsScreen(
@@ -235,7 +238,8 @@ fun Root(activity: Activity) {
                 is Screen.Config -> ConfigScreen(
                     state = state,
                     btnId = s.btnId,
-                    onChange = { item, v -> persist(state.withItem(s.btnId, item, v)) }
+                    onChange = { item, v -> persist(state.withItem(s.btnId, item, v)) },
+                    onNameChange = { persist(state.withName(s.btnId, it)) }
                 )
             }
         }

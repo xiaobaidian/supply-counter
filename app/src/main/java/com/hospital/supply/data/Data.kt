@@ -79,10 +79,11 @@ object Catalog {
     fun zeroCounts(): Map<String, Int> = ALL_BTNS.associate { (b, _) -> b.id to 0 }
 }
 
-/** 全部状态：每个按钮的台次 + 每个按钮的小件用量配置 + 本台备注 */
+/** 全部状态：每个按钮的台次 + 每个按钮的小件用量配置 + 按钮自定义名称 + 本台备注 */
 data class AppState(
     val counts: Map<String, Int>,
     val config: Map<String, Map<String, Int>>,
+    val names: Map<String, String> = emptyMap(),
     val note: String = ""
 ) {
     /** 小件累计：Σ(按钮台次 × 该按钮配置用量) */
@@ -113,9 +114,21 @@ data class AppState(
     fun defaultedConfig() = copy(config = Catalog.defaultConfig())
     fun withNote(v: String) = copy(note = v.take(NOTE_MAX))
 
+    /** 按钮显示名：用户改过就用改过的，没改或清空了就回退到内置名称 */
+    fun nameOf(id: String): String =
+        names[id]?.trim().orEmpty().ifBlank { Catalog.btn(id).name }
+
+    /** 用户是否自定义过这个按钮的名字 */
+    fun isRenamed(id: String): Boolean = names[id]?.trim().orEmpty().isNotBlank()
+
+    fun withName(id: String, v: String) =
+        copy(names = names + (id to v.trim().take(NAME_MAX)))
+
     companion object {
         /** 备注字数上限，防止无限输入导致存档膨胀 */
         const val NOTE_MAX = 200
+        /** 手术名称字数上限（按钮宽度有限） */
+        const val NAME_MAX = 12
     }
 }
 
@@ -150,7 +163,15 @@ class Store(context: Context) {
             }
         }
         val note = sp.getString(KEY_NOTE, "").orEmpty().take(AppState.NOTE_MAX)
-        return AppState(counts, config, note)
+        val names = runCatching {
+            val o = JSONObject(sp.getString(KEY_NAMES, null) ?: "{}")
+            Catalog.ALL_BTNS.mapNotNull { (b, _) ->
+                val v = o.optString(b.id, "").trim().take(AppState.NAME_MAX)
+                if (v.isBlank()) null else b.id to v
+            }.toMap()
+        }.getOrDefault(emptyMap())
+
+        return AppState(counts, config, names, note)
     }
 
     fun save(state: AppState) {
@@ -162,11 +183,14 @@ class Store(context: Context) {
             m.forEach { (item, v) -> o.put(item, v) }
             go.put(bid, o)
         }
+        val no = JSONObject()
+        state.names.forEach { (bid, v) -> if (v.isNotBlank()) no.put(bid, v) }
         sp.edit()
             .putString(KEY_COUNTS, co.toString())
             .putString(KEY_CONFIG, go.toString())
             .putInt(KEY_CFG_VER, CFG_VERSION)
             .putString(KEY_NOTE, state.note)
+            .putString(KEY_NAMES, no.toString())
             .apply()
     }
 
@@ -174,6 +198,7 @@ class Store(context: Context) {
         const val KEY_COUNTS = "counts"
         const val KEY_CONFIG = "config"
         const val KEY_NOTE = "note"
+        const val KEY_NAMES = "names"
         const val KEY_CFG_VER = "cfg_ver"
         /** 小件清单或默认用量结构变更时 +1：旧存档配置自动重置为默认值 */
         const val CFG_VERSION = 2

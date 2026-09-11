@@ -36,7 +36,15 @@ object Screenshot {
     val needsLegacyPermission: Boolean
         get() = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
 
-    fun capture(activity: Activity, onResult: (ok: Boolean, detail: String) -> Unit) {
+    /**
+     * @param cutBottomY 截图底边在窗口里的 Y 坐标（传 null 则截满全屏）。
+     *                   用来把「截图按钮那一行」排除在截图之外。
+     */
+    fun capture(
+        activity: Activity,
+        cutBottomY: Float? = null,
+        onResult: (ok: Boolean, detail: String) -> Unit
+    ) {
         val window = activity.window ?: run {
             onResult(false, "窗口未就绪")
             return
@@ -48,16 +56,25 @@ object Screenshot {
             onResult(false, "页面尚未绘制完成")
             return
         }
+
+        val loc = IntArray(2)
+        decor.getLocationInWindow(loc)
+        val top = loc[1]
+        val fullBottom = top + h
+        // 只有在可见范围内、且确实能切掉一部分时才生效
+        val bottom = cutBottomY?.toInt()
+            ?.takeIf { it > top + 80 && it < fullBottom - 8 }
+            ?: fullBottom
+        val bh = bottom - top
+
         val bitmap = try {
-            Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            Bitmap.createBitmap(w, bh, Bitmap.Config.ARGB_8888)
         } catch (t: Throwable) {
             onResult(false, "内存不足，无法截图")
             return
         }
 
-        val loc = IntArray(2)
-        decor.getLocationInWindow(loc)
-        val rect = Rect(loc[0], loc[1], loc[0] + w, loc[1] + h)
+        val rect = Rect(loc[0], top, loc[0] + w, bottom)
 
         try {
             PixelCopy.request(
