@@ -5,6 +5,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Rect
+import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.os.Handler
@@ -79,7 +80,8 @@ object Screenshot {
     }
 
     @Suppress("DEPRECATION")
-    private fun save(ctx: Context, bmp: Bitmap, name: String): android.net.Uri? = try {
+    private fun save(ctx: Context, bmp: Bitmap, name: String): Uri? {
+        return try {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val v = ContentValues().apply {
                 put(MediaStore.Images.Media.DISPLAY_NAME, name)
@@ -102,7 +104,7 @@ object Screenshot {
             val f = File(dir, name)
             FileOutputStream(f).use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
             MediaStore.Images.Media.insertImage(ctx.contentResolver, f.absolutePath, name, null)
-            android.net.Uri.fromFile(f)
+            Uri.fromFile(f)
         }
     } catch (t: Throwable) {
         null
