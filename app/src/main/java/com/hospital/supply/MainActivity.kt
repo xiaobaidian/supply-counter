@@ -73,6 +73,7 @@ import com.hospital.supply.ui.SettingsScreen
 import com.hospital.supply.ui.SupplyCounterTheme
 import com.hospital.supply.util.Feedback
 import com.hospital.supply.util.Screenshot
+import com.hospital.supply.util.SummaryImage
 import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
@@ -136,20 +137,11 @@ fun Root(activity: Activity) {
         feedback.minus()
     }
 
+    /** 导出汇总图：原生 Canvas 手绘，不依赖屏幕内容，也不会触发渲染崩溃 */
     fun shot() {
-        val width = activity.window?.decorView?.width ?: 0
-        Screenshot.captureContent(activity, width, content = {
-            SupplyCounterTheme { CaptureBody(state) }
-        }) { ok, detail ->
-            if (ok) {
-                toast = detail
-                return@captureContent
-            }
-            // 长图渲染失败时退回整屏截图，至少能存下一张图
-            Screenshot.capture(activity) { ok2, detail2 ->
-                toast = if (ok2) detail2 else detail
-                if (!ok2) feedback.blocked()
-            }
+        SummaryImage.export(context.applicationContext, state) { ok, detail ->
+            toast = detail
+            if (ok) feedback.tap() else feedback.blocked()
         }
     }
 
@@ -305,47 +297,13 @@ fun Root(activity: Activity) {
     }
 }
 
-/**
- * 截图用的整页内容：标题栏（不带设置齿轮）+ 主页全部卡片，不含「截图按钮」那一行。
- * 由 Screenshot.captureContent 在离屏按无限高度重绘，所以滚动出屏幕的部分也会被完整画出来。
- *
- * 注意：这里的所有 Modifier 都必须是 fillMaxWidth，不能出现 fillMaxSize。
- */
-@Composable
-private fun CaptureBody(state: AppState) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Palette.Bg)
-    ) {
-        AppBar(
-            title = "耗材统计",
-            subtitle = "本台手术 · 实时汇总",
-            showBack = false,
-            showSettings = false,
-            onBack = {},
-            onSettings = {}
-        )
-        HomeScreen(
-            state = state,
-            onInc = {},
-            onDec = {},
-            onClear = {},
-            onNoteChange = {},
-            onShot = {},
-            capture = true
-        )
-    }
-}
-
 @Composable
 private fun AppBar(
     title: String,
     subtitle: String,
     showBack: Boolean,
     onBack: () -> Unit,
-    onSettings: () -> Unit,
-    showSettings: Boolean = true
+    onSettings: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -396,7 +354,7 @@ private fun AppBar(
             }
         }
 
-        if (!showBack && showSettings) {
+        if (!showBack) {
             Box(
                 modifier = Modifier
                     .size(40.dp)

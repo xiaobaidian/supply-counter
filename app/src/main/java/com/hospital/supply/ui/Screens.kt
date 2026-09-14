@@ -328,8 +328,7 @@ fun StatCard(state: AppState, onClear: () -> Unit) {
 fun NoteCard(
     note: String,
     onNoteChange: (String) -> Unit,
-    onShot: () -> Unit,
-    capture: Boolean = false
+    onShot: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -392,23 +391,20 @@ fun NoteCard(
             )
         )
 
-        // 截图是「离屏重绘整页」，这里直接不渲染本行，图里就干净了
-        if (!capture) {
-            Spacer(Modifier.height(12.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Bottom
-            ) {
-                Text(
-                    text = "截图含整页内容，不含本行与按钮",
-                    color = Palette.Ink3,
-                    fontSize = 10.5.sp,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.padding(bottom = 13.dp)
-                )
-                Spacer(Modifier.weight(1f))
-                ShotButton(onClick = onShot)
-            }
+        Spacer(Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Bottom
+        ) {
+            Text(
+                text = "导出含全部卡片、小件合计与备注",
+                color = Palette.Ink3,
+                fontSize = 10.5.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(bottom = 13.dp)
+            )
+            Spacer(Modifier.weight(1f))
+            ShotButton(onClick = onShot)
         }
     }
 }
@@ -455,7 +451,7 @@ private fun ShotButton(onClick: () -> Unit) {
         }
         Spacer(Modifier.width(8.dp))
         Text(
-            text = "截图",
+            text = "导出图片",
             color = Color.White,
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
@@ -474,13 +470,11 @@ fun HomeScreen(
     onDec: (String) -> Unit,
     onClear: () -> Unit,
     onNoteChange: (String) -> Unit,
-    onShot: () -> Unit,
-    capture: Boolean = false
+    onShot: () -> Unit
 ) {
     Column(
         modifier = Modifier
-            // 离屏截图时高度是「无限」，绝不能用 fillMaxSize，否则撑到无限高直接崩
-            .then(if (capture) Modifier.fillMaxWidth() else Modifier.fillMaxSize())
+            .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp)
             .padding(bottom = 24.dp),
@@ -493,8 +487,7 @@ fun HomeScreen(
         NoteCard(
             note = state.note,
             onNoteChange = onNoteChange,
-            onShot = onShot,
-            capture = capture
+            onShot = onShot
         )
     }
 }
