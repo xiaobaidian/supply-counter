@@ -329,7 +329,7 @@ fun NoteCard(
     note: String,
     onNoteChange: (String) -> Unit,
     onShot: () -> Unit,
-    onFootY: (Float) -> Unit
+    capture: Boolean = false
 ) {
     Column(
         modifier = Modifier
@@ -392,23 +392,23 @@ fun NoteCard(
             )
         )
 
-        Spacer(Modifier.height(12.dp))
-        // 这一行（说明文字 + 截图按钮）不进截图，把它在窗口里的顶边报给上层
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .onGloballyPositioned { c -> onFootY(c.positionInWindow().y) },
-            verticalAlignment = Alignment.Bottom
-        ) {
-            Text(
-                text = "截图不会包含这一行",
-                color = Palette.Ink3,
-                fontSize = 10.5.sp,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(bottom = 13.dp)
-            )
-            Spacer(Modifier.weight(1f))
-            ShotButton(onClick = onShot)
+        // 截图是「离屏重绘整页」，这里直接不渲染本行，图里就干净了
+        if (!capture) {
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Bottom
+            ) {
+                Text(
+                    text = "截图含整页内容，不含本行与按钮",
+                    color = Palette.Ink3,
+                    fontSize = 10.5.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(bottom = 13.dp)
+                )
+                Spacer(Modifier.weight(1f))
+                ShotButton(onClick = onShot)
+            }
         }
     }
 }
@@ -475,11 +475,12 @@ fun HomeScreen(
     onClear: () -> Unit,
     onNoteChange: (String) -> Unit,
     onShot: () -> Unit,
-    onFootY: (Float) -> Unit
+    capture: Boolean = false
 ) {
     Column(
         modifier = Modifier
-            .fillMaxSize()
+            // 离屏截图时高度是「无限」，绝不能用 fillMaxSize，否则撑到无限高直接崩
+            .then(if (capture) Modifier.fillMaxWidth() else Modifier.fillMaxSize())
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp)
             .padding(bottom = 24.dp),
@@ -493,7 +494,7 @@ fun HomeScreen(
             note = state.note,
             onNoteChange = onNoteChange,
             onShot = onShot,
-            onFootY = onFootY
+            capture = capture
         )
     }
 }

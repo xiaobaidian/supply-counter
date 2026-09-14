@@ -109,8 +109,6 @@ fun Root(activity: Activity) {
     var screen by remember { mutableStateOf<Screen>(Screen.Home) }
     var toast by remember { mutableStateOf<String?>(null) }
     var ask by remember { mutableStateOf<Ask?>(null) }
-    // 备注卡里「截图按钮那一行」的窗口 Y 坐标，截图时从这里截断，避免把按钮本身拍进去
-    var footY by remember { mutableStateOf<Float?>(null) }
 
     DisposableEffect(Unit) {
         onDispose { feedback.release() }
@@ -139,9 +137,19 @@ fun Root(activity: Activity) {
     }
 
     fun shot() {
-        Screenshot.capture(activity, cutBottomY = footY) { ok, detail ->
-            toast = detail
-            if (!ok) feedback.blocked()
+        val width = activity.window?.decorView?.width ?: 0
+        Screenshot.captureContent(activity, width, content = {
+            SupplyCounterTheme { CaptureBody(state) }
+        }) { ok, detail ->
+            if (ok) {
+                toast = detail
+                return@captureContent
+            }
+            // 长图渲染失败时退回整屏截图，至少能存下一张图
+            Screenshot.capture(activity) { ok2, detail2 ->
+                toast = if (ok2) detail2 else detail
+                if (!ok2) feedback.blocked()
+            }
         }
     }
 
@@ -216,8 +224,7 @@ fun Root(activity: Activity) {
                         }
                     },
                     onNoteChange = { editNote(it) },
-                    onShot = { requestShot() },
-                    onFootY = { footY = it }
+                    onShot = { requestShot() }
                 )
 
                 is Screen.Settings -> SettingsScreen(
@@ -298,13 +305,47 @@ fun Root(activity: Activity) {
     }
 }
 
+/**
+ * 截图用的整页内容：标题栏（不带设置齿轮）+ 主页全部卡片，不含「截图按钮」那一行。
+ * 由 Screenshot.captureContent 在离屏按无限高度重绘，所以滚动出屏幕的部分也会被完整画出来。
+ *
+ * 注意：这里的所有 Modifier 都必须是 fillMaxWidth，不能出现 fillMaxSize。
+ */
+@Composable
+private fun CaptureBody(state: AppState) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Palette.Bg)
+    ) {
+        AppBar(
+            title = "耗材统计",
+            subtitle = "本台手术 · 实时汇总",
+            showBack = false,
+            showSettings = false,
+            onBack = {},
+            onSettings = {}
+        )
+        HomeScreen(
+            state = state,
+            onInc = {},
+            onDec = {},
+            onClear = {},
+            onNoteChange = {},
+            onShot = {},
+            capture = true
+        )
+    }
+}
+
 @Composable
 private fun AppBar(
     title: String,
     subtitle: String,
     showBack: Boolean,
     onBack: () -> Unit,
-    onSettings: () -> Unit
+    onSettings: () -> Unit,
+    showSettings: Boolean = true
 ) {
     Row(
         modifier = Modifier
@@ -355,7 +396,7 @@ private fun AppBar(
             }
         }
 
-        if (!showBack) {
+        if (!showBack && showSettings) {
             Box(
                 modifier = Modifier
                     .size(40.dp)
